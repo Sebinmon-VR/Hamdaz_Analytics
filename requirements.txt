@@ -1,8 +1,6 @@
-os
 requests
 flask
 dotenv 
-collections 
 pandas 
 pytz
 datetime 
