@@ -4,3 +4,5 @@ dotenv
 pandas 
 pytz
 datetime 
+
+gunicorn
