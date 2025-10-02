@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Proposals</title>
+</head>
+<body>
+    <h1>SharePoint Proposals List</h1>
+    {% if items %}
+        <table border="1">
+            <thead>
+                <tr>
+                    {% for col in columns %}
+                        <th>{{ col }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                    <tr>
+                        {% for col in columns %}
+                            <td>{{ item[col] }}</td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No items found.</p>
+    {% endif %}
+</body>
+</html>
+{% endblock %}

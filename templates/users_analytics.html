@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}User Analytics - My App{% endblock %}
+{% block content %}
+
+<h2>Analytics for {{ username }}</h2>
+
+<div>
+    <p>Total tasks: {{ analytics.tasks }}</p>
+    <p>Done: {{ analytics.submissions }}</p>
+    <p>Pending: {{ analytics.pending }}</p>
+
+</div>
+
+
+{% endblock %}

@@ -1,0 +1,75 @@
+
+{% extends "base.html" %}
+
+{% block content %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-6">
+    <h1 class="text-3xl font-bold mb-6">Dashboard Analytics</h1>
+
+    <!-- Overall Analytics -->
+    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+        <div class="bg-white p-4 rounded shadow">
+            <p class="text-gray-500">Total Users</p>
+            <p class="text-2xl font-bold">{{ overall.total_users }}</p>
+        </div>
+        <div class="bg-white p-4 rounded shadow">
+            <p class="text-gray-500">Total Tasks</p>
+            <p class="text-2xl font-bold">{{ overall.total_tasks }}</p>
+        </div>
+        <div class="bg-white p-4 rounded shadow">
+            <p class="text-gray-500">Completed Tasks</p>
+            <p class="text-2xl font-bold">{{ overall.tasks_completed }}</p>
+        </div>
+        <div class="bg-white p-4 rounded shadow">
+            <p class="text-gray-500">Pending Tasks</p>
+            <p class="text-2xl font-bold">{{ overall.tasks_pending }}</p>
+        </div>
+        <div class="bg-white p-4 rounded shadow">
+            <p class="text-gray-500">Missed Tasks</p>
+            <p class="text-2xl font-bold">{{ overall.tasks_missed }}</p>
+        </div>
+        <div class="bg-white p-4 rounded shadow">
+            <p class="text-gray-500">Orders Received</p>
+            <p class="text-2xl font-bold">{{ overall.orders_received }}</p>
+        </div>
+    </div>
+
+    <!-- Per-User Analytics -->
+    <h2 class="text-2xl font-bold mb-4">User Analytics</h2>
+    <div class="overflow-x-auto">
+        <table class="min-w-full bg-white rounded shadow">
+            <thead class="bg-gray-200">
+                <tr>
+                    <th class="py-2 px-4">User</th>
+                    <th class="py-2 px-4">Total Tasks</th>
+                    <th class="py-2 px-4">Completed</th>
+                    <th class="py-2 px-4">Pending</th>
+                    <th class="py-2 px-4">Missed</th>
+                    <th class="py-2 px-4">Orders Received</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user, data in per_user.items() %}
+                <tr class="border-b">
+                    <td class="py-2 px-4">{{ user }}</td>
+                    <td class="py-2 px-4">{{ data.total_tasks }}</td>
+                    <td class="py-2 px-4">{{ data.tasks_completed }}</td>
+                    <td class="py-2 px-4">{{ data.tasks_pending }}</td>
+                    <td class="py-2 px-4">{{ data.tasks_missed }}</td>
+                    <td class="py-2 px-4">{{ data.orders_received }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
+{% endblock %}
