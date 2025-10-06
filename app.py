@@ -1,32 +1,33 @@
-from flask import Flask, redirect, url_for, render_template, jsonify, request, session
 import os
+from flask import Flask, redirect, url_for, render_template, session, request, jsonify
 import requests
-from auth import *
+from datetime import datetime
+import pytz
+from collections import defaultdict
+
+from auth import login_redirect, fetch_tokens, get_graph_headers
 from functions import *
 
 app = Flask(__name__)
-from dotenv import load_dotenv
-
-load_dotenv(override=True)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "super_secret_key")
 
-# ----------------- CONFIG -----------------
-# Local dev: http://localhost:5000
-# Production: https://your-render-app.onrender.com
-BASE_URL = os.getenv("BASE_URL", "http://localhost:5000")
-
 GRAPH_API_ENDPOINT = "https://graph.microsoft.com/v1.0"
-# -------------------------------------------
+SITE_NAME = os.getenv("SITE_NAME", "ProposalTeam")
+LIST_NAME = os.getenv("LIST_NAME", "Proposals")
 
-# ----------------- ROUTES ------------------
-
+# ---------------------------------------------------------
+# INDEX
+# ---------------------------------------------------------
 @app.route("/")
 def index():
-    access_token = get_graph_headers()
-    if access_token:
-        return redirect(f"{BASE_URL}/files")
-    return redirect(f"{BASE_URL}/login")
+    headers = get_graph_headers()
+    if headers:
+        return redirect(url_for("dashboard"))
+    return redirect(url_for("login"))
 
+# ---------------------------------------------------------
+# LOGIN & CALLBACK
+# ---------------------------------------------------------
 @app.route("/login")
 def login():
     return login_redirect()
@@ -38,100 +39,141 @@ def callback():
         return "Error: No code returned", 400
 
     if fetch_tokens(code):
-        return redirect(f"{BASE_URL}/dashboard")
+        return redirect(url_for("dashboard"))
     return "Error fetching tokens", 400
 
+# ---------------------------------------------------------
+# DASHBOARD
+# ---------------------------------------------------------
+@app.route("/dashboard")
+def dashboard():
+    structured_items = get_sharepoint_list_data(SITE_NAME, LIST_NAME)
+    df = sharepoint_data_to_df(structured_items)
+    overall = compute_overall_analytics(df)
+    per_user = compute_user_analytics(df)
+
+    user_info = session.get("user_info", {})
+    greeting = get_greeting()
+    access_token = session["access_token"]
+    picture = get_profile_picture(access_token)
+
+    return render_template(
+        "dashboard.html",
+        overall=overall,
+        per_user=per_user,
+        user=user_info,
+        greeting=greeting, 
+        picture=picture,
+        org_name = get_graph_data(f"{GRAPH_API_ENDPOINT}/organization", access_token)["value"][0]["displayName"]
+
+
+    )
+
+# ---------------------------------------------------------
+# TEAMS ANALYTICS
+# ---------------------------------------------------------
+@app.route("/teams")
+def teams():
+    sp_items = get_sharepoint_list_data(SITE_NAME, LIST_NAME)
+    analytics = compute_teams_analytics(sp_items)
+    users = list(analytics.get("users", {}).keys())
+    return render_template("teams.html", analytics=analytics, users=users)
+
+# ---------------------------------------------------------
+# SPECIFIC USER ANALYTICS
+# ---------------------------------------------------------
+@app.route("/user/<username>")
+def user_analytics(username):
+    if username.lower() == "dashboard":
+        return redirect(url_for("dashboard"))
+
+    sp_items = get_sharepoint_list_data(SITE_NAME, LIST_NAME)
+    analytics = compute_user_analytics_specific(sp_items, username)
+    return render_template("users_analytics.html", username=username, analytics=analytics)
+
+# ---------------------------------------------------------
+# ONEDRIVE FILES
+# ---------------------------------------------------------
 @app.route("/files")
 def files():
     headers = get_graph_headers()
     if not headers:
-        return redirect(f"{BASE_URL}/login")
+        return redirect(url_for("login"))
 
-    # Get all files in root
     response = requests.get(f"{GRAPH_API_ENDPOINT}/me/drive/root/children", headers=headers)
-
     if response.status_code == 401:
-        headers = get_graph_headers()  # refresh token
+        headers = get_graph_headers()
         response = requests.get(f"{GRAPH_API_ENDPOINT}/me/drive/root/children", headers=headers)
 
     if response.status_code != 200:
         return f"Error fetching files: {response.json()}", response.status_code
 
     files = response.json().get("value", [])
-    files_with_paths = [{"name": f.get("name"), "path": f.get("parentReference", {}).get("path", "/") + "/" + f.get("name")} for f in files]
+    files_with_paths = [
+        {
+            "name": f.get("name"),
+            "path": f.get("parentReference", {}).get("path", "/") + "/" + f.get("name")
+        } for f in files
+    ]
 
     return render_template("files.html", files=files_with_paths)
 
-@app.route("/excel-data")
-def excel_data():
-    user_id = os.getenv("user_id")  # or use get_my_user_id()
-    if not user_id:
-        return "Error: Cannot get user ID", 400
 
-    file_path = f"/users/{user_id}/drive/root:/Sharepoint Datas.xlsx"
-    tables = get_excel_tables(file_path)
-    table_data = {table.get("name"): get_table_data(file_path, table.get("name")) for table in tables}
-    return jsonify(table_data)
 
+# ---------------------------------------------------------
+# USER PROFILE
+# ---------------------------------------------------------
+@app.route("/profile")
+def profile():
+    headers = get_graph_headers()
+    if not headers:
+        return jsonify({"error": "User not authenticated"}), 401
+
+    response = requests.get(f"{GRAPH_API_ENDPOINT}/me", headers=headers)
+    if response.status_code == 200:
+        return jsonify(response.json())
+    return jsonify({"error": "Failed to fetch profile", "details": response.json()}), response.status_code
+
+# ---------------------------------------------------------
+# USERS WITH PHOTOS
+# ---------------------------------------------------------
+@app.route("/users-photos")
+def users_photos():
+    users = get_users_with_photos()
+    return render_template("users_photos.html", users=users)
+
+# ---------------------------------------------------------
+# PROPOSALS LIST
+# ---------------------------------------------------------
 @app.route("/proposals")
 def proposals():
-    site_name = os.getenv("SITE_NAME")
-    list_name = os.getenv("LIST_NAME")
-
-    items = get_sharepoint_list_data(site_name, list_name)
-    if not items:
-        return "No items found or unable to fetch list", 400
-
+    items = get_sharepoint_list_data(SITE_NAME, LIST_NAME)
     columns = list(items[0].keys()) if items else []
     return render_template("proposals.html", items=items, columns=columns)
 
-@app.route("/dashboard")
-def dashboard():
-    structured_items = get_sharepoint_list_data("ProposalTeam", "Proposals")
-    df = sharepoint_data_to_df(structured_items)
-
-    overall = compute_overall_analytics(df)
-    per_user = compute_user_analytics(df)
-
-    return render_template("dashboard.html", overall=overall, per_user=per_user)
-
-@app.route("/teams")
-def teams():
-    sp_items = get_sharepoint_list_data("ProposalTeam", "Proposals")
-    analytics = compute_teams_analytics(sp_items)
-    users = list(analytics["users"].keys())
-    return render_template("teams.html", analytics=analytics, users=users)
-
-@app.route("/analytics")
-def analytics():
-    user_id = get_my_user_id()
-    if not user_id:
-        return "Error: Cannot get user ID", 400
-
-    file_path = f"/users/{user_id}/drive/root:/Sharepoint Datas.xlsx"
-    data = get_users_analytics(file_path)
-    return jsonify(data)
-
-@app.route("/user/<username>")
-def user_analytics(username):
-    if username == "dashboard":
-        return redirect(f"{BASE_URL}/dashboard")
-
-    sp_items = get_sharepoint_list_data("ProposalTeam", "Proposals")
-    user_analytics_data = compute_user_analytics_specific(sp_items, username)
-
-    return render_template(
-        "users_analytics.html",
-        username=username,
-        analytics=user_analytics_data
-    )
-
+# ---------------------------------------------------------
+# LOGOUT
+# ---------------------------------------------------------
 @app.route("/logout")
 def logout():
     session.clear()
-    return redirect(f"{BASE_URL}/")
+    return redirect(url_for("index"))
 
-# ----------------- MAIN --------------------
+# ---------------------------------------------------------
+# GREETING FUNCTION
+# ---------------------------------------------------------
+def get_greeting():
+    now = datetime.now()
+    hour = now.hour
+    if 5 <= hour < 12:
+        return "Good Morning"
+    elif 12 <= hour < 17:
+        return "Good Afternoon"
+    elif 17 <= hour < 21:
+        return "Good Evening"
+    else:
+        return "Hello"
+
+# ---------------------------------------------------------
 if __name__ == "__main__":
-    # Local development only
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=True)

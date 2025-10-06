@@ -1,7 +1,6 @@
 import os
 import requests
 from flask import session, redirect
-from urllib.parse import quote
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
@@ -9,24 +8,26 @@ load_dotenv(override=True)
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 TENANT_ID = os.getenv("TENANT_ID")
-BASE_URL = os.getenv("BASE_URL", "http://localhost:5000")
-REDIRECT_URI = f"{BASE_URL}/callback"
-SCOPES = os.getenv("SCOPES", "https://graph.microsoft.com/.default offline_access")
+REDIRECT_URI = os.getenv("REDIRECT_URI")
+SCOPES = os.getenv("SCOPES")
+GRAPH_API_ENDPOINT=os.getenv("GRAPH_API_ENDPOINT")
 
 AUTH_URL = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/authorize"
 TOKEN_URL = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token"
 
 def login_redirect():
+    """Redirect user to Microsoft login page"""
     auth_url = (
         f"{AUTH_URL}?client_id={CLIENT_ID}"
         f"&response_type=code"
-        f"&redirect_uri={quote(REDIRECT_URI)}"
+        f"&redirect_uri={REDIRECT_URI}"
         f"&response_mode=query"
-        f"&scope={quote(SCOPES)}"
+        f"&scope={SCOPES}"
     )
     return redirect(auth_url)
 
 def fetch_tokens(code):
+    """Exchange authorization code for access & refresh tokens"""
     token_data = {
         "client_id": CLIENT_ID,
         "client_secret": CLIENT_SECRET,
@@ -46,6 +47,7 @@ def fetch_tokens(code):
     return False
 
 def refresh_access_token():
+    """Refresh expired access token using refresh token"""
     refresh_token = session.get("refresh_token")
     if not refresh_token:
         return None
@@ -70,9 +72,12 @@ def refresh_access_token():
     return access_token
 
 def get_graph_headers():
+    """Return headers with valid access token"""
     access_token = session.get("access_token")
     if not access_token:
         access_token = refresh_access_token()
     if access_token:
         return {"Authorization": f"Bearer {access_token}"}
     return None
+
+
