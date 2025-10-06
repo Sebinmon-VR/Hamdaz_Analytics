@@ -76,8 +76,18 @@ def dashboard():
 def teams():
     sp_items = get_sharepoint_list_data(SITE_NAME, LIST_NAME)
     analytics = compute_teams_analytics(sp_items)
+    user_info = session.get("user_info", {})
+    user=user_info
     users = list(analytics.get("users", {}).keys())
-    return render_template("teams.html", analytics=analytics, users=users)
+    access_token = session["access_token"]
+    picture = get_profile_picture(access_token)
+    return render_template("teams.html",
+            analytics=analytics, 
+            users=users ,
+            user=user,
+            org_name = get_graph_data(f"{GRAPH_API_ENDPOINT}/organization", access_token)["value"][0]["displayName"],
+            picture=picture
+            )
 
 # ---------------------------------------------------------
 # SPECIFIC USER ANALYTICS
@@ -86,10 +96,15 @@ def teams():
 def user_analytics(username):
     if username.lower() == "dashboard":
         return redirect(url_for("dashboard"))
-
+    user_info = session.get("user_info", {})
+    user=user_info
+    
+    access_token = session["access_token"]
+    picture = get_profile_picture(access_token)
+    
     sp_items = get_sharepoint_list_data(SITE_NAME, LIST_NAME)
     analytics = compute_user_analytics_specific(sp_items, username)
-    return render_template("users_analytics.html", username=username, analytics=analytics)
+    return render_template("users_analytics.html", username=username, analytics=analytics , user=user ,picture=picture )
 
 # ---------------------------------------------------------
 # ONEDRIVE FILES
