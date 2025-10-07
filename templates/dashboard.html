@@ -3,7 +3,7 @@
 
 {% block content %}
 
-<h3 style="margin-top: 10px; font-size: 20px ; margin-bottom: 10px; margin-left: 25px;">{{greeting}} {{user.displayName}}</h3>
+<h3 style="margin-top: 10px; font-size: 20px ; margin-bottom: 10px; margin-left: 25px;">{{greeting}} {{user.name }}</h3>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -94,6 +94,8 @@
                 <thead class="bg-gray-100 rounded">
                     <tr>
                         <th class="py-2 px-3 text-left text-gray-500">User</th>
+                        <th class="py-2 px-3 text-left text-gray-500">Total Tasks</th>
+
                         <th class="py-2 px-3 text-left text-gray-500">Active Tasks</th>
                         <th class="py-2 px-3 text-left text-gray-500">Completed</th>
                         <th class="py-2 px-3 text-left text-gray-500">Missed</th>
@@ -103,10 +105,11 @@
                     {% for user, data in per_user.items() %}
                     <tr class="border-b hover:bg-gray-50 transition-colors">
                         <td class="py-2 px-3">{{ user }}</td>
+                        <td class="py-2 px-3">{{ data.total_tasks }}</td>
                         <td class="py-2 px-3">{{ data.tasks_pending }}</td>
                         <td class="py-2 px-3">{{ data.tasks_completed }}</td>
                         <td class="py-2 px-3">{{ data.tasks_missed }}</td>
-                        
+
                     </tr>
                     {% endfor %}
                 </tbody>

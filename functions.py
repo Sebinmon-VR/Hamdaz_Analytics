@@ -127,19 +127,35 @@ def compute_overall_analytics(df):
 def compute_user_analytics(df):
     if df.empty or 'AssignedTo' not in df.columns:
         return {}
+
     uae_tz = pytz.timezone("Asia/Dubai")
     now_uae = datetime.now(uae_tz)
-    df['BCD'] = pd.to_datetime(df['BCD'], errors='coerce', utc=True).dt.tz_convert(uae_tz)
+
+    # Convert dates to timezone-aware
+    if 'BCD' in df.columns:
+        df['BCD'] = pd.to_datetime(df['BCD'], errors='coerce', utc=True).dt.tz_convert(uae_tz)
+    if 'Start Date' in df.columns:
+        df['Start Date'] = pd.to_datetime(df['Start Date'], errors='coerce', utc=True).dt.tz_convert(uae_tz)
+
     analytics = {}
     for user, user_df in df.groupby('AssignedTo'):
+        # Last assigned date = latest Start Date
+        last_assigned_date = None
+        if 'Start Date' in user_df.columns and not user_df['Start Date'].isna().all():
+            last_assigned_date = user_df['Start Date'].max()
+            last_assigned_date = last_assigned_date.strftime("%Y-%m-%d %H:%M")
+
         analytics[user] = {
             "total_tasks": len(user_df),
             "tasks_completed": len(user_df[user_df['SubmissionStatus']=='Submitted']),
             "tasks_pending": len(user_df[(user_df['SubmissionStatus']!='Submitted') & (user_df['BCD']>=now_uae)]),
             "tasks_missed": len(user_df[(user_df['SubmissionStatus']!='Submitted') & (user_df['BCD']<now_uae)]),
-            "orders_received": len(user_df[user_df['Status']=='Received']) if 'Status' in df.columns else 0
+            "orders_received": len(user_df[user_df['Status']=='Received']) if 'Status' in df.columns else 0,
+            "last_assigned_date": last_assigned_date
         }
+
     return analytics
+
 
 def compute_user_analytics_specific(sp_items, username):
     uae_tz = pytz.timezone("Asia/Dubai")
@@ -334,3 +350,56 @@ def update_excel_row(file_path, table_name, row_index, row_values):
 # all_rows = get_excel_table_rows(file_path, table_name)
 # add_excel_row(file_path, table_name, ["Sebin", "New Task", "2025-10-10", "Pending"])
 # update_excel_row(file_path, table_name, 2, ["Sebin", "Updated Task", "2025-10-12", "Completed"])
+
+from io import BytesIO
+
+
+GRAPH_API_ENDPOINT = "https://graph.microsoft.com/v1.0"
+EXCEL_FILE_NAME = "UserAnalytics.xlsx"
+
+
+def ensure_excel_file():
+    """Ensure the user analytics Excel file exists in OneDrive root."""
+    headers = get_graph_headers()
+    check_url = f"{GRAPH_API_ENDPOINT}/me/drive/root:/{EXCEL_FILE_NAME}"
+    r = requests.get(check_url, headers=headers)
+
+    if r.status_code == 404:
+        print("📁 Creating new User_Analytics.xlsx in OneDrive root...")
+        excel_data = BytesIO()
+        pd.DataFrame().to_excel(excel_data, index=False)
+        excel_data.seek(0)
+
+        create_url = f"{GRAPH_API_ENDPOINT}/me/drive/root:/{EXCEL_FILE_NAME}:/content"
+        resp = requests.put(create_url, headers=headers, data=excel_data.read())
+
+        if resp.status_code in [200, 201]:
+            print("✅ Created User_Analytics.xlsx successfully.")
+        else:
+            print("❌ Failed to create Excel file:", resp.text)
+    else:
+        print("✅ Excel file exists in OneDrive root.")
+
+
+def update_user_analytics_excel(per_user):
+    """Upload user analytics data to the Excel file in OneDrive root."""
+    headers = get_graph_headers()
+    ensure_excel_file()
+
+    # Convert per_user dict to DataFrame
+    df_per_user = pd.DataFrame.from_dict(per_user, orient="index").reset_index()
+    df_per_user.rename(columns={"index": "User"}, inplace=True)
+
+    # Save to Excel in memory
+    excel_data = BytesIO()
+    df_per_user.to_excel(excel_data, index=False)
+    excel_data.seek(0)
+
+    # Upload file to OneDrive root
+    upload_url = f"{GRAPH_API_ENDPOINT}/me/drive/root:/{EXCEL_FILE_NAME}:/content"
+    response = requests.put(upload_url, headers=headers, data=excel_data.read())
+
+    if response.status_code in [200, 201]:
+        print("✅ User analytics Excel updated successfully.")
+    else:
+        print("❌ Failed to update Excel file:", response.text)
