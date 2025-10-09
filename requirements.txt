@@ -4,5 +4,7 @@ dotenv
 pandas 
 pytz
 datetime 
-
+apscheduler
 gunicorn
+msal
+openpyxl

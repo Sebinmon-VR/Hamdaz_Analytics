@@ -403,3 +403,127 @@ def update_user_analytics_excel(per_user):
         print("✅ User analytics Excel updated successfully.")
     else:
         print("❌ Failed to update Excel file:", response.text)
+
+
+
+# =========================================================
+# BUSINESS CARD FUNCTIONS
+# =========================================================
+
+import os
+import msal
+import requests
+
+
+# --- Configuration for our "Robot User" ---
+TENANT_ID = os.getenv("TENANT_ID")
+CLIENT_ID = os.getenv("CLIENT_ID")
+CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+
+# Using nayif onedrive account for storing the Excel file
+ONEDRIVE_USER_ID = os.getenv("ONEDRIVE_USER_ID") 
+
+EXCEL_FILE_NAME = "Contacts.xlsx"
+EXCEL_TABLE_NAME = "Table1" 
+
+MS_GRAPH_AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
+MS_GRAPH_SCOPE = ["https://graph.microsoft.com/.default"]
+
+# --- Helper function to get an "Application" token for our robot ---
+def get_application_token():
+    """Gets an access token for the application itself, not a logged-in user."""
+    msal_app = msal.ConfidentialClientApplication(
+        CLIENT_ID, authority=MS_GRAPH_AUTHORITY, client_credential=CLIENT_SECRET
+    )
+    # Check cache first
+    result = msal_app.acquire_token_silent(MS_GRAPH_SCOPE, account=None)
+    if not result:
+        print("No suitable application token in cache, acquiring a new one...")
+        result = msal_app.acquire_token_for_client(scopes=MS_GRAPH_SCOPE)
+    
+    if "access_token" in result:
+        return result["access_token"]
+    else:
+        print("Failed to get application token:", result.get("error_description"))
+        return None
+
+# --- Main function to READ all contacts from Excel ---
+def get_contacts_from_excel():
+    """
+    Connects to MS Graph as the application and reads all rows from the Excel file.
+    """
+    access_token = get_application_token()
+    if not access_token:
+        return [] # Return an empty list if authentication fails
+
+    graph_url = f"https://graph.microsoft.com/v1.0/users/{ONEDRIVE_USER_ID}/drive/root:/{EXCEL_FILE_NAME}:/workbook/tables/{EXCEL_TABLE_NAME}/rows"
+    headers = {'Authorization': 'Bearer ' + access_token}
+    
+    try:
+        response = requests.get(graph_url, headers=headers)
+        response.raise_for_status() # This will raise an error for bad responses (4xx or 5xx)
+        
+        rows = response.json().get("value", [])
+        # Convert the raw data into a list of dictionaries that our HTML can use
+        contacts = []
+        for i, row in enumerate(rows):
+            values = row.get("values", [[]])[0]
+            # Ensure the row has enough columns to prevent errors
+            if len(values) >= 10: 
+                contacts.append({
+                    "id": i, # The row's index is its ID for editing
+                    "Category": values[0],
+                    "Organization": values[1],
+                    "Name": values[2],
+                    "Designation": values[3],
+                    "Contact": values[4],
+                    "Email": values[5],
+                    "Website": values[6],
+                    "Address": values[7],
+                    "Remarks": values[8],
+                    "Contact Type": values[9]
+                })
+        return contacts
+    except requests.exceptions.RequestException as e:
+        print(f"An error occurred while getting Excel data: {e}")
+        # In case of an error (like file not found), return an empty list
+        return []
+
+# --- Main function to UPDATE a contact in Excel ---
+def update_contact_in_excel(row_index, data):
+    """
+    Connects to MS Graph and updates a specific row in the Excel file by its index.
+    """
+    access_token = get_application_token()
+    if not access_token:
+        return False
+
+    # The order of values MUST match the Excel columns exactly
+    row_values = [
+        data.get('Category', ''),
+        data.get('Organization', ''),
+        data.get('Name', ''),
+        data.get('Designation', ''),
+        data.get('Contact', ''),
+        data.get('Email', ''),
+        data.get('Website', ''),
+        data.get('Address', ''),
+        data.get('Remarks', ''),
+        data.get('Contact Type', '')
+    ]
+
+    # The Graph API uses itemAt(index=...) to find a row by its position (0-indexed)
+    graph_url = f"https://graph.microsoft.com/v1.0/users/{ONEDRIVE_USER_ID}/drive/root:/{EXCEL_FILE_NAME}:/workbook/tables/{EXCEL_TABLE_NAME}/rows/itemAt(index={row_index})"
+    headers = {'Authorization': 'Bearer ' + access_token, 'Content-Type': 'application/json'}
+    payload = {"values": [row_values]}
+
+    try:
+        response = requests.patch(graph_url, headers=headers, json=payload)
+        response.raise_for_status() # Check for errors
+
+        print(f"Successfully updated row at index {row_index}.")
+        return True
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to update row. Error: {e}")
+        return False
+

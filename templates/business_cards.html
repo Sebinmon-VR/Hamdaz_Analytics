@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+
+{% block title %}Business Cards{% endblock %}
+
+{% block content %}
+
+<style>
+    /* Main container and header styles */
+    .content-container {
+        padding: 2em;
+        background-color: #f8f9fa;
+    }
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5em;
+    }
+    .page-header h1 {
+        margin: 0;
+        font-size: 2rem;
+        color: #343a40;
+    }
+
+    /* Filter and Search controls */
+    .controls {
+        display: flex;
+        gap: 1em;
+        margin-bottom: 1.5em;
+        align-items: center;
+    }
+    #searchInput {
+        flex-grow: 1;
+        padding: 0.75em;
+        border: 1px solid #ced4da;
+        border-radius: 0.25rem;
+        font-size: 1rem;
+    }
+    .filter-buttons button {
+        padding: 0.75em 1.5em;
+        border: 1px solid #007bff;
+        background-color: white;
+        color: #007bff;
+        cursor: pointer;
+        border-radius: 0.25rem;
+        transition: all 0.2s;
+    }
+    .filter-buttons button.active,
+    .filter-buttons button:hover {
+        background-color: #007bff;
+        color: white;
+    }
+
+    /* Table styles */
+    .table-container {
+        overflow-x: auto;
+        background: white;
+        border-radius: 0.25rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    th, td {
+        padding: 1em;
+        text-align: left;
+        border-bottom: 1px solid #dee2e6;
+        white-space: nowrap;
+    }
+    th {
+        background-color: #e9ecef;
+        font-weight: 600;
+        color: #495057;
+    }
+    tr:nth-child(even) {
+        background-color: #f8f9fa;
+    }
+    tr:hover {
+        background-color: #e9ecef;
+    }
+
+    /* Action buttons in the table */
+    .action-buttons button {
+        padding: 0.5em 1em;
+        border: none;
+        border-radius: 0.25rem;
+        cursor: pointer;
+        font-size: 0.9rem;
+        margin-right: 5px;
+    }
+    .btn-edit { background-color: #007bff; color: white; }
+    .btn-save { background-color: #28a745; color: white; }
+    .btn-cancel { background-color: #6c757d; color: white; }
+
+    /* Input fields for editing */
+    td input[type="text"] {
+        width: 100%;
+        min-width: 150px; /* Ensure inputs have a minimum width */
+        padding: 0.5em;
+        box-sizing: border-box;
+    }
+</style>
+
+<div class="content-container">
+    <div class="page-header">
+        <h1>Business Cards</h1>
+    </div>
+
+    <!-- Controls for Search and Filter -->
+    <div class="controls">
+        <input type="text" id="searchInput" placeholder="Search by name, organization, etc...">
+        <div class="filter-buttons">
+            <button class="filter-btn active" data-filter="All">All</button>
+            <button class="filter-btn" data-filter="Customer">Customers</button>
+            <button class="filter-btn" data-filter="Supplier">Suppliers</button>
+        </div>
+    </div>
+
+    <!-- Table to display contacts -->
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Organization</th>
+                    <th>Name</th>
+                    <th>Designation</th>
+                    <th>Contact</th>
+                    <th>Email</th>
+                    <th>Website</th>
+                    <!-- THE FIX IS HERE: Added Address and Remarks -->
+                    <th>Address</th>
+                    <th>Remarks</th>
+                    <th>Contact Type</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="contactsTableBody">
+                {% for contact in contacts %}
+                <tr data-id="{{ contact.id }}" data-type="{{ contact['Contact Type'] }}">
+                    <td data-field="Category">{{ contact.Category }}</td>
+                    <td data-field="Organization">{{ contact.Organization }}</td>
+                    <td data-field="Name">{{ contact.Name }}</td>
+                    <td data-field="Designation">{{ contact.Designation }}</td>
+                    <td data-field="Contact">{{ contact.Contact }}</td>
+                    <td data-field="Email">{{ contact.Email }}</td>
+                    <td data-field="Website">{{ contact.Website }}</td>
+                    <!-- THE FIX IS HERE: Added Address and Remarks -->
+                    <td data-field="Address">{{ contact.Address }}</td>
+                    <td data-field="Remarks">{{ contact.Remarks }}</td>
+                    <td data-field="Contact Type">{{ contact['Contact Type'] }}</td>
+                    <td class="action-buttons">
+                        <button class="btn-edit">Edit</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const tableBody = document.getElementById('contactsTableBody');
+    const searchInput = document.getElementById('searchInput');
+    const filterButtons = document.querySelectorAll('.filter-btn');
+    let activeFilter = 'All';
+
+    // --- MAIN FILTER/SEARCH FUNCTION ---
+    function applyFilters() {
+        const searchTerm = searchInput.value.toLowerCase();
+        tableBody.querySelectorAll('tr').forEach(row => {
+            const rowText = row.textContent.toLowerCase();
+            const rowType = row.dataset.type;
+
+            const matchesSearch = rowText.includes(searchTerm);
+            const matchesFilter = (activeFilter === 'All' || rowType === activeFilter);
+
+            row.style.display = matchesSearch && matchesFilter ? '' : 'none';
+        });
+    }
+
+    // --- EVENT LISTENERS ---
+    searchInput.addEventListener('input', applyFilters);
+
+    filterButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            filterButtons.forEach(btn => btn.classList.remove('active'));
+            this.classList.add('active');
+            activeFilter = this.dataset.filter;
+            applyFilters();
+        });
+    });
+
+    // --- EDIT/SAVE/CANCEL LOGIC (EVENT DELEGATION) ---
+    tableBody.addEventListener('click', function(e) {
+        const target = e.target;
+        const row = target.closest('tr');
+        if (!row) return;
+
+        // --- EDIT BUTTON CLICKED ---
+        if (target.classList.contains('btn-edit')) {
+            row.querySelectorAll('td[data-field]').forEach(cell => {
+                cell.innerHTML = `<input type="text" value="${cell.textContent.trim()}">`;
+            });
+            row.querySelector('.action-buttons').innerHTML = `
+                <button class="btn-save">Save</button>
+                <button class="btn-cancel">Cancel</button>
+            `;
+        }
+
+        // --- CANCEL BUTTON CLICKED ---
+        if (target.classList.contains('btn-cancel')) {
+            row.querySelectorAll('td[data-field]').forEach(cell => {
+                cell.innerHTML = cell.querySelector('input').defaultValue;
+            });
+            row.querySelector('.action-buttons').innerHTML = `<button class="btn-edit">Edit</button>`;
+        }
+
+        // --- SAVE BUTTON CLICKED ---
+        if (target.classList.contains('btn-save')) {
+            const editedData = { id: row.dataset.id };
+            let isValid = true;
+            
+            row.querySelectorAll('td[data-field]').forEach(cell => {
+                const input = cell.querySelector('input');
+                const fieldName = cell.dataset.field;
+                const newValue = input.value;
+                editedData[fieldName] = newValue;
+
+                // Simple validation: Remarks and Website can be empty, others cannot.
+                if (!newValue && fieldName !== 'Remarks' && fieldName !== 'Website') {
+                    input.style.borderColor = 'red';
+                    isValid = false;
+                } else {
+                    input.style.borderColor = '';
+                }
+            });
+
+            if (!isValid) {
+                alert('Please fill in all required fields.');
+                return;
+            }
+
+            // Send data to our temporary backend endpoint
+            fetch('/update-contact', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(editedData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Save response:', data);
+                if (data.status === 'success') {
+                    // Update the UI
+                    row.querySelectorAll('td[data-field]').forEach(cell => {
+                        cell.innerHTML = editedData[cell.dataset.field];
+                    });
+                    row.querySelector('.action-buttons').innerHTML = `<button class="btn-edit">Edit</button>`;
+                    // Update filter data if needed
+                    row.dataset.type = editedData['Contact Type'];
+                } else {
+                    alert('Failed to save data.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while saving.');
+            });
+        }
+    });
+});
+</script>
+
+{% endblock %}
+

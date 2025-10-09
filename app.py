@@ -346,6 +346,65 @@ def logout():
     session.clear()
     return redirect(url_for("index"))
 
+
+
+# =========================================================
+# BUSINESS CARD PAGE ROUTES
+# =========================================================
+
+# This route now displays the REAL data from Excel
+@app.route('/businesscards')
+def business_cards_page():
+    # We need user info for the navbar, so we'll check if the user is logged in
+    if not session.get("user_info"):
+        # If not logged in, we can't show the page. Redirect to login.
+        return redirect(url_for("login"))
+        
+    # Import the REAL data function with your new name
+    from functions import get_contacts_from_excel
+    
+    contacts = get_contacts_from_excel()
+
+    # Get the user info needed to render the navbar correctly
+    user_info = session.get("user_info", {})
+    access_token = session.get("access_token")
+    picture = get_profile_picture(access_token)
+    org_name = get_graph_data(f"{GRAPH_API_ENDPOINT}/organization", access_token)["value"][0]["displayName"] if access_token else "Org"
+
+    return render_template(
+        'business_cards.html', 
+        contacts=contacts, 
+        user=user_info, 
+        picture=picture, 
+        org_name=org_name
+    )
+
+# This route now saves the edited data to Excel
+@app.route('/update-contact', methods=['POST'])
+def update_contact():
+    # Import the REAL update function with your new name
+    from functions import update_contact_in_excel
+    
+    edited_data = request.json
+    print("Received edited data from UI:", edited_data)
+    
+    row_index = edited_data.get('id')
+    
+    # We need to convert the ID from the webpage (which is a string) to an integer
+    try:
+        row_index = int(row_index)
+    except (ValueError, TypeError):
+        return jsonify({"status": "error", "message": "Invalid row ID."}), 400
+
+    success = update_contact_in_excel(row_index, edited_data)
+    
+    if success:
+        return jsonify({"status": "success", "message": "Update successful!"})
+    else:
+        return jsonify({"status": "error", "message": "Failed to update Excel file."}), 500
+
+
+
 # ---------------------------------------------------------
 if __name__ == "__main__":
     app.run(debug=True)
